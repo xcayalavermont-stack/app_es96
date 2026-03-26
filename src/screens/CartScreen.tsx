@@ -9,21 +9,41 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Dimensions,
 } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
 import { CartItem, RootStackParamList } from '../types';
 
 type CartScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Cart'>;
 
 interface Props {
   navigation: CartScreenNavigationProp;
+  route: RouteProp<RootStackParamList, 'Cart'>;
 }
 
-export default function CartScreen({ navigation }: Props) {
+export default function CartScreen({ navigation, route }: Props) {
+  const { memberName } = route.params;
+
+  React.useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Text style={{ fontFamily: 'Oswald_400Regular', color: '#fff', fontSize: 15, marginRight: 8 }}>
+          {memberName}
+        </Text>
+      ),
+    });
+  }, [memberName]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
 
   // Called when a barcode is submitted (from scanner or manual entry)
   const handleBarcodeSubmit = async () => {
@@ -85,29 +105,72 @@ export default function CartScreen({ navigation }: Props) {
       Alert.alert('Empty Cart', 'Add items before checking out.');
       return;
     }
-    navigation.navigate('Checkout', { items: cartItems });
+    navigation.navigate('Checkout', { items: cartItems, memberName });
+  };
+
+  // Tracks whether the current swipe passed the full-delete threshold
+  const isFullSwipe = useRef<Record<string, boolean>>({});
+
+  const renderRightActions = (
+    id: string,
+    _progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+  ) => {
+    dragX.addListener(({ value }) => {
+      if (value < -(SCREEN_WIDTH * 0.55)) {
+        isFullSwipe.current[id] = true;
+      }
+    });
+
+    const bgColor = dragX.interpolate({
+      inputRange: [-SCREEN_WIDTH, -SCREEN_WIDTH * 0.55, 0],
+      outputRange: ['#7f1d1d', '#dc2626', '#dc2626'],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <Animated.View style={[styles.swipeDelete, { backgroundColor: bgColor }]}>
+        <TouchableOpacity style={styles.swipeDeleteInner} onPress={() => removeItem(id)}>
+          <Text style={styles.swipeDeleteText}>Delete</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
   };
 
   const renderItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartRow}>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.itemBarcode}>{item.barcode}</Text>
-        <Text style={styles.itemPrice}>${(item.price * item.quantity).toFixed(2)}</Text>
+    <Swipeable
+      renderRightActions={(progress, dragX) => renderRightActions(item.id, progress, dragX)}
+      rightThreshold={60}
+      overshootRight={false}
+      onSwipeableOpen={() => {
+        if (isFullSwipe.current[item.id]) {
+          removeItem(item.id);
+        }
+      }}
+      onSwipeableClose={() => {
+        isFullSwipe.current[item.id] = false;
+      }}
+    >
+      <View style={styles.cartRow}>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.itemBarcode}>{item.barcode}</Text>
+          <Text style={styles.itemPrice}>${(item.price * item.quantity).toFixed(2)}</Text>
+        </View>
+        <View style={styles.quantityControls}>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(item.id, -1)}>
+            <Text style={styles.qtyBtnText}>−</Text>
+          </TouchableOpacity>
+          <Text style={styles.qtyText}>{item.quantity}</Text>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(item.id, 1)}>
+            <Text style={styles.qtyBtnText}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.id)}>
+            <Text style={styles.removeBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={styles.quantityControls}>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(item.id, -1)}>
-          <Text style={styles.qtyBtnText}>−</Text>
-        </TouchableOpacity>
-        <Text style={styles.qtyText}>{item.quantity}</Text>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(item.id, 1)}>
-          <Text style={styles.qtyBtnText}>+</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.id)}>
-          <Text style={styles.removeBtnText}>✕</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    </Swipeable>
   );
 
   return (
@@ -120,7 +183,7 @@ export default function CartScreen({ navigation }: Props) {
         <TextInput
           ref={inputRef}
           style={styles.scanInput}
-          placeholder="Scan or type barcode..."
+          placeholder="Search For An Item"
           placeholderTextColor="#999"
           value={barcodeInput}
           onChangeText={setBarcodeInput}
@@ -154,7 +217,7 @@ export default function CartScreen({ navigation }: Props) {
       )}
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalAmount}>${cartTotal.toFixed(2)}</Text>
@@ -188,7 +251,7 @@ const styles = StyleSheet.create({
   scanInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#1a56db',
+    borderColor: '#a62035',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -197,7 +260,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   addBtn: {
-    backgroundColor: '#1a56db',
+    backgroundColor: '#a62035',
     borderRadius: 8,
     paddingHorizontal: 18,
     justifyContent: 'center',
@@ -241,7 +304,7 @@ const styles = StyleSheet.create({
   },
   itemPrice: {
     fontSize: 14,
-    color: '#1a56db',
+    color: '#a62035',
     fontWeight: '600',
     marginTop: 4,
   },
@@ -260,7 +323,7 @@ const styles = StyleSheet.create({
   },
   qtyBtnText: {
     fontSize: 18,
-    color: '#1a56db',
+    color: '#a62035',
     fontWeight: '600',
     lineHeight: 22,
   },
@@ -284,6 +347,25 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 13,
     fontWeight: '600',
+  },
+  swipeDelete: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 10,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  swipeDeleteInner: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swipeDeleteText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   emptyState: {
     flex: 1,
@@ -325,7 +407,7 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a56db',
+    color: '#a62035',
   },
   checkoutBtn: {
     backgroundColor: '#16a34a',

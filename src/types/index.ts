@@ -13,6 +13,8 @@ export interface CartItem {
 
 export type RootStackParamList = {
   Login: undefined;
-  Cart: undefined;
-  Checkout: { items: CartItem[] };
+  LoginSuccess: { memberName: string };
+  Cart: { memberName: string };
+  Checkout: { items: CartItem[]; memberName: string };
+  Admin: undefined;
 };
