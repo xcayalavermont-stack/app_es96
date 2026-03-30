@@ -19,6 +19,12 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { CartItem, RootStackParamList } from '../types';
+import {
+  Product,
+  loadProducts,
+  findProductByQuery,
+  filterProducts,
+} from '../data/productStore';
 
 type CartScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Cart'>;
 
@@ -40,50 +46,77 @@ export default function CartScreen({ navigation, route }: Props) {
     });
   }, [memberName]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [scanning, setScanning] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
 
+  const loadAvailableProducts = async () => {
+    setRefreshing(true);
+    try {
+      const products = await loadProducts();
+      setAvailableProducts(products);
+    } catch (error) {
+      Alert.alert('Unable to load inventory', 'Try again later.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadAvailableProducts();
+  }, []);
+
   // Called when a barcode is submitted (from scanner or manual entry)
   const handleBarcodeSubmit = async () => {
-    const code = barcodeInput.trim();
-    if (!code) return;
+    const query = searchText.trim();
+    if (!query) return;
 
-    setBarcodeInput('');
-    inputRef.current?.focus();
+    const matchedProduct = findProductByQuery(query, availableProducts);
+    const suggestions = filterProducts(query, availableProducts);
 
-    // Check if item already in cart
-    const existing = cartItems.find((item) => item.barcode === code);
-    if (existing) {
-      setCartItems((prev) =>
-        prev.map((item) =>
-          item.barcode === code ? { ...item, quantity: item.quantity + 1 } : item
-        )
-      );
+    if (matchedProduct) {
+      addProductToCart(matchedProduct);
       return;
     }
 
-    try {
-      // TODO: Replace with real product lookup API call
-      // Example:
-      // const response = await fetch(`https://your-api.com/products?barcode=${code}`);
-      // const product = await response.json();
-      // if (!response.ok) throw new Error('Product not found');
-
-      // Placeholder product lookup
-      const newItem: CartItem = {
-        id: Date.now().toString(),
-        barcode: code,
-        name: `Item ${code}`,   // Replace with product.name from API
-        quantity: 1,
-        price: 0.00,             // Replace with product.price from API
-      };
-
-      setCartItems((prev) => [...prev, newItem]);
-    } catch (error: any) {
-      Alert.alert('Not Found', `No product found for barcode: ${code}`);
+    if (suggestions.length === 1) {
+      addProductToCart(suggestions[0]);
+      return;
     }
+
+    Alert.alert(
+      'Item not found',
+      'Type more of the item name or choose from the available inventory below.'
+    );
+  };
+
+  const addProductToCart = (product: Product) => {
+    const existing = cartItems.find((item) => item.barcode === product.barcode);
+    if (existing) {
+      setCartItems((prev) =>
+        prev.map((item) =>
+          item.barcode === product.barcode
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      );
+    } else {
+      setCartItems((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          barcode: product.barcode,
+          name: product.name,
+          quantity: 1,
+          price: product.price,
+        },
+      ]);
+    }
+
+    setSearchText('');
+    inputRef.current?.focus();
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -183,10 +216,10 @@ export default function CartScreen({ navigation, route }: Props) {
         <TextInput
           ref={inputRef}
           style={styles.scanInput}
-          placeholder="Search For An Item"
+          placeholder="Search for an item or scan barcode"
           placeholderTextColor="#999"
-          value={barcodeInput}
-          onChangeText={setBarcodeInput}
+          value={searchText}
+          onChangeText={setSearchText}
           onSubmitEditing={handleBarcodeSubmit}
           returnKeyType="done"
           autoFocus
@@ -200,12 +233,49 @@ export default function CartScreen({ navigation, route }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* Available inventory search and selection */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Available Items</Text>
+        <Text style={styles.sectionSubtitle}>Pull down to refresh inventory.</Text>
+      </View>
+      <FlatList
+        data={filterProducts(searchText, availableProducts)}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.inventoryRow}
+            onPress={() => addProductToCart(item)}
+          >
+            <View style={styles.inventoryInfo}>
+              <Text style={styles.inventoryName}>{item.name}</Text>
+              <Text style={styles.inventoryBarcode}>{item.barcode}</Text>
+            </View>
+            <View style={styles.inventoryRight}>
+              <Text style={styles.inventoryPrice}>${item.price.toFixed(2)}</Text>
+              <Text style={styles.inventoryStock}>{item.stock} in stock</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🔎</Text>
+            <Text style={styles.emptyText}>No matching items found.</Text>
+            <Text style={styles.emptySubtext}>
+              Try a different search term or refresh the inventory.
+            </Text>
+          </View>
+        )}
+        refreshing={refreshing}
+        onRefresh={loadAvailableProducts}
+      />
+
       {/* Cart Items */}
       {cartItems.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>📦</Text>
           <Text style={styles.emptyText}>No items yet.</Text>
-          <Text style={styles.emptySubtext}>Scan a barcode or type one above to add items.</Text>
+          <Text style={styles.emptySubtext}>Select an item above or type it to add to cart.</Text>
         </View>
       ) : (
         <FlatList
@@ -422,5 +492,63 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  sectionHeader: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 4,
+  },
+  inventoryRow: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  inventoryInfo: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  inventoryName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#222',
+  },
+  inventoryBarcode: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+  inventoryRight: {
+    alignItems: 'flex-end',
+  },
+  inventoryPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#a62035',
+  },
+  inventoryStock: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
   },
 });
