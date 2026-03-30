@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import * as Battery from 'expo-battery';
 import { CartItem, RootStackParamList } from '../types';
 
 type CheckoutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Checkout'>;
@@ -20,28 +21,92 @@ interface Props {
   route: CheckoutScreenRouteProp;
 }
 
+const TIMEOUT_SECONDS = 15 * 60; // 15 minutes
+
+function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function SuccessView({
+  items,
+  total,
+  onDone,
+}: {
+  items: CartItem[];
+  total: number;
+  onDone: () => void;
+}) {
+  const [secondsLeft, setSecondsLeft] = useState(TIMEOUT_SECONDS);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 15-minute countdown
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          onDone();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  // Return to login when charging is detected
+  useEffect(() => {
+    const subscription = Battery.addBatteryStateListener(({ batteryState }) => {
+      if (
+        batteryState === Battery.BatteryState.CHARGING ||
+        batteryState === Battery.BatteryState.FULL
+      ) {
+        onDone();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View style={styles.successContainer}>
+      <Text style={styles.successIcon}>✓</Text>
+      <Text style={styles.successTitle}>Order Submitted!</Text>
+      <Text style={styles.successSubtitle}>
+        {items.reduce((s, i) => s + i.quantity, 0)} items • ${total.toFixed(2)}
+      </Text>
+      <TouchableOpacity style={styles.doneBtn} onPress={onDone}>
+        <Text style={styles.doneBtnText}>Return To Login</Text>
+      </TouchableOpacity>
+      <Text style={styles.timerText}>
+        Returning to login in {formatTime(secondsLeft)}
+      </Text>
+    </View>
+  );
+}
+
 export default function CheckoutScreen({ navigation, route }: Props) {
-  const { items } = route.params;
+  const { items, memberName, labAssignments } = route.params;
+
+  React.useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Text style={{ fontFamily: 'Oswald_400Regular', color: '#fff', fontSize: 15, marginRight: 8 }}>
+          {memberName}
+        </Text>
+      ),
+    });
+  }, [memberName]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.08; // 8% tax — adjust as needed
-  const total = subtotal + tax;
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
-      // TODO: Replace with real checkout/order submission API call
-      // Example:
-      // const response = await fetch('https://your-api.com/orders', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ items, total }),
-      // });
-      // if (!response.ok) throw new Error('Order failed');
-
-      // Placeholder: simulate network delay
       await new Promise((resolve) => setTimeout(resolve, 800));
       setSubmitted(true);
     } catch (error: any) {
@@ -52,22 +117,11 @@ export default function CheckoutScreen({ navigation, route }: Props) {
   };
 
   const handleDone = () => {
-    navigation.replace('Cart');
+    navigation.replace('Login');
   };
 
   if (submitted) {
-    return (
-      <View style={styles.successContainer}>
-        <Text style={styles.successIcon}>✓</Text>
-        <Text style={styles.successTitle}>Order Submitted!</Text>
-        <Text style={styles.successSubtitle}>
-          {items.reduce((s, i) => s + i.quantity, 0)} items • ${total.toFixed(2)}
-        </Text>
-        <TouchableOpacity style={styles.doneBtn} onPress={handleDone}>
-          <Text style={styles.doneBtnText}>Start New Cart</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <SuccessView items={items} total={total} onDone={handleDone} />;
   }
 
   const renderItem = ({ item }: { item: CartItem }) => (
@@ -86,28 +140,35 @@ export default function CheckoutScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Order Summary */}
         <Text style={styles.sectionTitle}>Order Summary</Text>
-        <View style={styles.card}>
-          <FlatList
-            data={items}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            scrollEnabled={false}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-          />
-        </View>
 
-        {/* Totals */}
+        {labAssignments ? (
+          Object.entries(labAssignments).map(([labName, labItems]) => (
+            <View key={labName}>
+              <Text style={styles.labHeader}>{labName}</Text>
+              <View style={styles.card}>
+                {labItems.map((item, index) => (
+                  <View key={item.id}>
+                    {index > 0 && <View style={styles.separator} />}
+                    {renderItem({ item })}
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.card}>
+            <FlatList
+              data={items}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              scrollEnabled={false}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+            />
+          </View>
+        )}
+
         <View style={styles.totalsCard}>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>${subtotal.toFixed(2)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Tax (8%)</Text>
-            <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
-          </View>
           <View style={[styles.totalRow, styles.grandTotalRow]}>
             <Text style={styles.grandTotalLabel}>Total</Text>
             <Text style={styles.grandTotalValue}>${total.toFixed(2)}</Text>
@@ -115,7 +176,6 @@ export default function CheckoutScreen({ navigation, route }: Props) {
         </View>
       </ScrollView>
 
-      {/* Confirm Button */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.confirmBtn, submitting && styles.confirmBtnDisabled]}
@@ -145,6 +205,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#222',
     marginBottom: 12,
+  },
+  labHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#a62035',
+    marginBottom: 8,
+    marginTop: 4,
   },
   card: {
     backgroundColor: '#fff',
@@ -187,7 +254,7 @@ const styles = StyleSheet.create({
   linePrice: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1a56db',
+    color: '#a62035',
   },
   separator: {
     height: 1,
@@ -209,15 +276,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  totalLabel: {
-    fontSize: 15,
-    color: '#555',
-  },
-  totalValue: {
-    fontSize: 15,
-    color: '#333',
-    fontWeight: '500',
-  },
   grandTotalRow: {
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
@@ -233,7 +291,7 @@ const styles = StyleSheet.create({
   grandTotalValue: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#1a56db',
+    color: '#a62035',
   },
   footer: {
     backgroundColor: '#fff',
@@ -279,14 +337,21 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   doneBtn: {
-    backgroundColor: '#1a56db',
+    backgroundColor: '#a62035',
     borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 40,
+    marginBottom: 32,
   },
   doneBtnText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  timerText: {
+    position: 'absolute',
+    bottom: 32,
+    fontSize: 12,
+    color: '#bbb',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
+import { useNfcScan } from '../hooks/useNfcScan';
+import { loadMembers } from '../data/memberStore';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -19,31 +22,54 @@ interface Props {
 }
 
 export default function LoginScreen({ navigation }: Props) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [huid, setHuid] = useState('');
   const [loading, setLoading] = useState(false);
+  const { scan, supported } = useNfcScan();
 
-  const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter username and password.');
-      return;
+  useEffect(() => {
+    if (!supported) return;
+    let active = true;
+
+    async function listenForCard() {
+      while (active) {
+        const uid = await scan();
+        if (!active || !uid) continue;
+
+        const members = await loadMembers();
+        const member = members.find(
+          (m) => m.cardUid.toUpperCase() === uid.toUpperCase()
+        );
+
+        if (member) {
+          if (active) navigation.replace('LoginSuccess', { memberName: member.name, memberLabs: member.labs });
+        } else {
+          Alert.alert('Not Recognised', 'This card is not enrolled. Please log in manually.');
+        }
+      }
     }
 
+    listenForCard();
+    return () => { active = false; };
+  }, [supported]);
+
+  const handleLogin = async (id: string = huid) => {
+    if (!id.trim()) {
+      Alert.alert('Error', 'Please enter your HUID.');
+      return;
+    }
     setLoading(true);
     try {
-      // TODO: Replace with real authentication API call
-      // Example:
-      // const response = await fetch('https://your-api.com/auth/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ username, password }),
-      // });
-      // const data = await response.json();
-      // if (!response.ok) throw new Error(data.message);
-
-      // Placeholder: accept any credentials for now
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      navigation.replace('Cart');
+      if (id.trim() === '1111') {
+        navigation.replace('Admin');
+      } else {
+        const members = await loadMembers();
+        const member = members.find((m) => m.huid === id.trim());
+        if (!member) {
+          Alert.alert('Not Found', 'No member found with that HUID.');
+          return;
+        }
+        navigation.replace('LoginSuccess', { memberName: member.name, memberLabs: member.labs });
+      }
     } catch (error: any) {
       Alert.alert('Login Failed', error.message ?? 'An error occurred.');
     } finally {
@@ -56,101 +82,175 @@ export default function LoginScreen({ navigation }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.card}>
-        <Text style={styles.title}>Inventory App</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Username"
-          placeholderTextColor="#999"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="next"
+      {/* Wyss Institute Header */}
+      <View style={styles.header}>
+        <Image
+          source={require('../../assets/wysslogo-black-short.png')}
+          style={styles.wyssLogo}
+          resizeMode="contain"
         />
+      </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          returnKeyType="done"
-          onSubmitEditing={handleLogin}
+      {/* Harvard Shield */}
+      <View style={styles.shieldContainer}>
+        <Image
+          source={require('../../assets/Screenshot 2026-03-25 192202.png')}
+          style={styles.shieldImage}
+          resizeMode="contain"
         />
+      </View>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
-        </TouchableOpacity>
+      {/* NFC Prompt */}
+      <View style={styles.promptContainer}>
+        <Text style={styles.promptTitle}>Tap HUID To Begin</Text>
+        <Text style={styles.promptSubtitle}>Tap HUID on NFC Tap Point To Login</Text>
+      </View>
+
+      {/* Spacer */}
+      <View style={{ flex: 1 }} />
+
+      {/* Manual Login */}
+      <View style={styles.manualLogin}>
+        <Text style={styles.manualLabel}>Manual Login:</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="HUID"
+            placeholderTextColor="#999"
+            value={huid}
+            onChangeText={setHuid}
+            keyboardType="numeric"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="go"
+            onSubmitEditing={() => handleLogin()}
+          />
+          <TouchableOpacity
+            style={[styles.goButton, loading && styles.goButtonDisabled]}
+            onPress={() => handleLogin()}
+            disabled={loading}
+          >
+            <Text style={styles.goButtonText}>Go</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+const CRIMSON = '#A51C30';
+const SHIELD_SIZE = 180;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a56db',
-    justifyContent: 'center',
+    backgroundColor: CRIMSON,
     alignItems: 'center',
-    padding: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+    paddingHorizontal: 24,
   },
-  card: {
+  header: {
+    marginBottom: 8,
+  },
+  wyssLogo: {
+    width: 260,
+    height: 60,
+  },
+  shieldContainer: {
+    marginTop: 60,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  shieldImage: {
+    width: SHIELD_SIZE,
+    height: SHIELD_SIZE,
+  },
+  shield: {
+    width: SHIELD_SIZE,
+    height: SHIELD_SIZE * 1.15,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 32,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    borderRadius: 12,
+    borderBottomLeftRadius: SHIELD_SIZE * 0.5,
+    borderBottomRightRadius: SHIELD_SIZE * 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  title: {
+  shieldInner: {
+    width: SHIELD_SIZE * 0.82,
+    height: SHIELD_SIZE * 0.95,
+    backgroundColor: CRIMSON,
+    borderRadius: 8,
+    borderBottomLeftRadius: SHIELD_SIZE * 0.42,
+    borderBottomRightRadius: SHIELD_SIZE * 0.42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  shieldH: {
+    fontFamily: 'Oswald_700Bold',
+    fontSize: 90,
+    color: '#fff',
+    lineHeight: 100,
+    marginTop: -10,
+  },
+  promptContainer: {
+    alignItems: 'center',
+  },
+  promptTitle: {
+    fontFamily: 'Oswald_700Bold',
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a56db',
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  subtitle: {
+  promptSubtitle: {
+    fontFamily: 'Oswald_400Regular',
     fontSize: 14,
-    color: '#666',
+    color: 'rgba(255,255,255,0.85)',
     textAlign: 'center',
-    marginBottom: 32,
+  },
+  manualLogin: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  manualLabel: {
+    fontFamily: 'Oswald_600SemiBold',
+    fontSize: 18,
+    color: '#fff',
+    marginBottom: 10,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    width: '100%',
+    alignItems: 'center',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
+    fontFamily: 'Oswald_400Regular',
     color: '#333',
-    marginBottom: 16,
-    backgroundColor: '#fafafa',
+    marginRight: 8,
   },
-  button: {
-    backgroundColor: '#1a56db',
-    borderRadius: 8,
-    paddingVertical: 14,
+  goButton: {
+    backgroundColor: '#4a5e1a',
+    borderRadius: 6,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
   },
-  buttonDisabled: {
+  goButtonDisabled: {
     opacity: 0.6,
   },
-  buttonText: {
+  goButtonText: {
+    fontFamily: 'Oswald_600SemiBold',
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
   },
 });

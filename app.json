@@ -4,21 +4,20 @@
     "slug": "inventory-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1a56db"
+    "ios": {
+      "infoPlist": {
+        "NFCReaderUsageDescription": "Used to read Harvard HUID cards for member enrollment."
+      },
+      "entitlements": {
+        "com.apple.developer.nfc.readersession.formats": ["TAG"]
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1a56db"
-      },
       "package": "com.inventoryapp",
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.NFC"
       ]
     },
     "plugins": [
@@ -27,7 +26,8 @@
         {
           "cameraPermission": "Allow Inventory App to access your camera for barcode scanning."
         }
-      ]
+      ],
+      "./plugins/withNfc"
     ]
   }
 }
