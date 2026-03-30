@@ -88,7 +88,7 @@ function SuccessView({
 }
 
 export default function CheckoutScreen({ navigation, route }: Props) {
-  const { items, memberName } = route.params;
+  const { items, memberName, labAssignments } = route.params;
 
   React.useEffect(() => {
     navigation.setOptions({
@@ -141,15 +141,32 @@ export default function CheckoutScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.sectionTitle}>Order Summary</Text>
-        <View style={styles.card}>
-          <FlatList
-            data={items}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            scrollEnabled={false}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-          />
-        </View>
+
+        {labAssignments ? (
+          Object.entries(labAssignments).map(([labName, labItems]) => (
+            <View key={labName}>
+              <Text style={styles.labHeader}>{labName}</Text>
+              <View style={styles.card}>
+                {labItems.map((item, index) => (
+                  <View key={item.id}>
+                    {index > 0 && <View style={styles.separator} />}
+                    {renderItem({ item })}
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.card}>
+            <FlatList
+              data={items}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              scrollEnabled={false}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+            />
+          </View>
+        )}
 
         <View style={styles.totalsCard}>
           <View style={[styles.totalRow, styles.grandTotalRow]}>
@@ -188,6 +205,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#222',
     marginBottom: 12,
+  },
+  labHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#a62035',
+    marginBottom: 8,
+    marginTop: 4,
   },
   card: {
     backgroundColor: '#fff',

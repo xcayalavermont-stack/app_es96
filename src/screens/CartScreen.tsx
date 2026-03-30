@@ -28,7 +28,7 @@ interface Props {
 }
 
 export default function CartScreen({ navigation, route }: Props) {
-  const { memberName } = route.params;
+  const { memberName, memberLabs } = route.params;
 
   React.useEffect(() => {
     navigation.setOptions({
@@ -105,7 +105,7 @@ export default function CartScreen({ navigation, route }: Props) {
       Alert.alert('Empty Cart', 'Add items before checking out.');
       return;
     }
-    navigation.navigate('Checkout', { items: cartItems, memberName });
+    navigation.navigate('LabAssignmentQuestion', { cartItems, memberName, memberLabs });
   };
 
   // Tracks whether the current swipe passed the full-delete threshold

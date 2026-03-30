@@ -19,7 +19,7 @@ type Props = {
 const CRIMSON = '#A51C30';
 
 export default function LoginSuccessScreen({ navigation, route }: Props) {
-  const { memberName } = route.params;
+  const { memberName, memberLabs } = route.params;
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -64,7 +64,7 @@ export default function LoginSuccessScreen({ navigation, route }: Props) {
       <Animated.View style={{ transform: [{ scale }], opacity }}>
         <TouchableOpacity
           style={styles.circle}
-          onPress={() => navigation.replace('Cart', { memberName })}
+          onPress={() => navigation.replace('Cart', { memberName, memberLabs })}
           activeOpacity={0.8}
         >
           <Text style={styles.circleText}>Tap Phone on Keypad to{'\n'}Unlock Stock Room</Text>

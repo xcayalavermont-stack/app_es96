@@ -41,7 +41,7 @@ export default function LoginScreen({ navigation }: Props) {
         );
 
         if (member) {
-          if (active) navigation.replace('LoginSuccess', { memberName: member.name });
+          if (active) navigation.replace('LoginSuccess', { memberName: member.name, memberLabs: member.labs });
         } else {
           Alert.alert('Not Recognised', 'This card is not enrolled. Please log in manually.');
         }
@@ -68,7 +68,7 @@ export default function LoginScreen({ navigation }: Props) {
           Alert.alert('Not Found', 'No member found with that HUID.');
           return;
         }
-        navigation.replace('LoginSuccess', { memberName: member.name });
+        navigation.replace('LoginSuccess', { memberName: member.name, memberLabs: member.labs });
       }
     } catch (error: any) {
       Alert.alert('Login Failed', error.message ?? 'An error occurred.');

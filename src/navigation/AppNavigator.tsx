@@ -6,6 +6,10 @@ import LoginSuccessScreen from '../screens/LoginSuccessScreen';
 import CartScreen from '../screens/CartScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 import AdminScreen from '../screens/AdminScreen';
+import LabAssignmentQuestionScreen from '../screens/LabAssignmentQuestionScreen';
+import LabSelectOneScreen from '../screens/LabSelectOneScreen';
+import LabSelectManyScreen from '../screens/LabSelectManyScreen';
+import LabItemAssignScreen from '../screens/LabItemAssignScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -42,6 +46,26 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Admin"
         component={AdminScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="LabAssignmentQuestion"
+        component={LabAssignmentQuestionScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="LabSelectOne"
+        component={LabSelectOneScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="LabSelectMany"
+        component={LabSelectManyScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="LabItemAssign"
+        component={LabItemAssignScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
