@@ -6,25 +6,8 @@ export interface Product {
   stock: number;
 }
 
-const localProducts: Product[] = [
-  { id: 'p1', barcode: '000101', name: 'Pipette, 1000 µL', price: 12.5, stock: 24 },
-  { id: 'p2', barcode: '000102', name: 'Pipette, 200 µL', price: 11.0, stock: 32 },
-  { id: 'p3', barcode: '000103', name: 'Pipette Tips, Yellow', price: 8.75, stock: 120 },
-  { id: 'p4', barcode: '000104', name: 'Beaker, 250 mL', price: 5.5, stock: 18 },
-  { id: 'p5', barcode: '000105', name: 'Graduated Cylinder, 100 mL', price: 6.25, stock: 12 },
-  { id: 'p6', barcode: '000106', name: 'Microtube Rack', price: 9.95, stock: 10 },
-  { id: 'p7', barcode: '000107', name: 'Lab Notebook', price: 4.5, stock: 40 },
-  { id: 'p8', barcode: '000108', name: 'Disposable Gloves, Large', price: 7.2, stock: 76 },
-];
-
 interface ProductDataSource {
   loadAll(): Promise<Product[]>;
-}
-
-class LocalProductDataSource implements ProductDataSource {
-  async loadAll(): Promise<Product[]> {
-    return localProducts;
-  }
 }
 
 // Remote Supabase SQL backend support
