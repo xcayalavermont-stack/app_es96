@@ -88,7 +88,7 @@ export default function CartScreen({ navigation, route }: Props) {
 
     Alert.alert(
       'Item not found',
-      'Type more of the item name or choose from the available inventory below.'
+      'Type more of the item name or barcode and try again.'
     );
   };
 
@@ -233,49 +233,12 @@ export default function CartScreen({ navigation, route }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Available inventory search and selection */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Available Items</Text>
-        <Text style={styles.sectionSubtitle}>Pull down to refresh inventory.</Text>
-      </View>
-      <FlatList
-        data={filterProducts(searchText, availableProducts)}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.inventoryRow}
-            onPress={() => addProductToCart(item)}
-          >
-            <View style={styles.inventoryInfo}>
-              <Text style={styles.inventoryName}>{item.name}</Text>
-              <Text style={styles.inventoryBarcode}>{item.barcode}</Text>
-            </View>
-            <View style={styles.inventoryRight}>
-              <Text style={styles.inventoryPrice}>${item.price.toFixed(2)}</Text>
-              <Text style={styles.inventoryStock}>{item.stock} in stock</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🔎</Text>
-            <Text style={styles.emptyText}>No matching items found.</Text>
-            <Text style={styles.emptySubtext}>
-              Try a different search term or refresh the inventory.
-            </Text>
-          </View>
-        )}
-        refreshing={refreshing}
-        onRefresh={loadAvailableProducts}
-      />
-
       {/* Cart Items */}
       {cartItems.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>📦</Text>
           <Text style={styles.emptyText}>No items yet.</Text>
-          <Text style={styles.emptySubtext}>Select an item above or type it to add to cart.</Text>
+          <Text style={styles.emptySubtext}>Type an item name or scan a barcode to add it to cart.</Text>
         </View>
       ) : (
         <FlatList
