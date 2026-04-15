@@ -26,9 +26,9 @@ export default function LabSelectOneScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {memberLabs.map((lab) => (
+        {memberLabs.map((lab, index) => (
           <TouchableOpacity
-            key={lab}
+            key={`${lab}-${index}`}
             style={styles.labBtn}
             onPress={() => handleSelectLab(lab)}
           >

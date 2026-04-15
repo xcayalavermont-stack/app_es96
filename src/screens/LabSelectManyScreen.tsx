@@ -45,11 +45,11 @@ export default function LabSelectManyScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {memberLabs.map((lab) => {
+        {memberLabs.map((lab, index) => {
           const isSelected = selected.has(lab);
           return (
             <TouchableOpacity
-              key={lab}
+              key={`${lab}-${index}`}
               style={[styles.labBtn, isSelected && styles.labBtnSelected]}
               onPress={() => toggle(lab)}
             >

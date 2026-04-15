@@ -19,7 +19,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_T3p8DrhHKdFp4CzL3eTzAw_IkSkpKCd';
 class SupabaseProductDataSource implements ProductDataSource {
   async loadAll(): Promise<Product[]> {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/items?select=id,code,name,price,inventory(quantity)`,
+      `${SUPABASE_URL}/rest/v1/items?select=id,code,name,price`,
       {
         headers: {
           apikey: SUPABASE_ANON_KEY,
@@ -39,13 +39,12 @@ class SupabaseProductDataSource implements ProductDataSource {
       code: string;
       name: string;
       price: number;
-      inventory?: Array<{ quantity: number }>;
     }>).map((row) => ({
       id: row.id,
       barcode: row.code,
       name: row.name,
       price: row.price,
-      stock: row.inventory?.reduce((sum, inv) => sum + inv.quantity, 0) ?? 0,
+      stock: 0, // Placeholder, inventory not loaded
     }));
   }
 }
@@ -67,13 +66,52 @@ export function findProductByQuery(query: string, products: Product[]): Product 
   );
 }
 
-export function filterProducts(query: string, products: Product[]): Product[] {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return products;
+function levenshtein(a: string, b: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1).toLowerCase() === a.charAt(j - 1).toLowerCase()) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
 
-  return products.filter(
+function escapeRegex(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function filterProducts(query: string, products: Product[]): Product[] {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return products;
+
+  const exactMatches = products.filter(
     (item) =>
-      item.name.toLowerCase().startsWith(normalized) ||
-      item.barcode.startsWith(normalized)
+      item.name.toLowerCase().includes(trimmed) ||
+      item.barcode.toLowerCase().includes(trimmed)
   );
+
+  // Include fuzzy matches for close typos
+  const fuzzyMatches = products
+    .filter((item) => !exactMatches.includes(item))
+    .filter((item) => {
+      const nameDist = levenshtein(trimmed, item.name.toLowerCase());
+      const barcodeDist = levenshtein(trimmed, item.barcode);
+      return nameDist <= 2 || barcodeDist <= 1;
+    });
+
+  return [...exactMatches, ...fuzzyMatches];
 }

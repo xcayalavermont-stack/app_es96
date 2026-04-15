@@ -21,6 +21,7 @@ import {
   addMember,
   updateMember,
   deleteMember,
+  normalizeCardUid,
 } from '../data/memberStore';
 import { useNfcScan } from '../hooks/useNfcScan';
 
@@ -47,15 +48,19 @@ export default function AdminScreen({ navigation }: Props) {
   const [showAdd, setShowAdd] = useState(false);
 
   const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [editCardUid, setEditCardUid] = useState('');
   const [editLabs, setEditLabs] = useState<string[]>([]);
   const [editNewLab, setEditNewLab] = useState('');
 
   const [addHuid, setAddHuid] = useState('');
   const [addName, setAddName] = useState('');
+  const [addEmail, setAddEmail] = useState('');
   const [addCardUid, setAddCardUid] = useState('');
   const [addLabs, setAddLabs] = useState<string[]>([]);
   const [addNewLab, setAddNewLab] = useState('');
+  const [savingAdd, setSavingAdd] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const { scan, scanning, supported } = useNfcScan();
 
@@ -83,6 +88,7 @@ export default function AdminScreen({ navigation }: Props) {
   function openEdit(member: MemberRecord) {
     setEditTarget(member);
     setEditName(member.name);
+    setEditEmail(member.email);
     setEditCardUid(member.cardUid);
     setEditLabs(member.labs ? [...member.labs] : []);
     setEditNewLab('');
@@ -94,13 +100,25 @@ export default function AdminScreen({ navigation }: Props) {
 
   async function handleSaveEdit() {
     if (!editTarget) return;
-    await updateMember(editTarget.huid, {
-      name: editName,
-      cardUid: editCardUid,
-      labs: editLabs,
-    });
-    await refresh();
-    closeEdit();
+    setSavingEdit(true);
+    try {
+      const normalizedCardUid = normalizeCardUid(editCardUid);
+      await updateMember(editTarget.huid, {
+        name: editName,
+        email: editEmail,
+        cardUid: normalizedCardUid,
+        labs: editLabs,
+      });
+      await refresh();
+      closeEdit();
+    } catch (error: any) {
+      Alert.alert(
+        'Save Failed',
+        error?.message ?? 'Unable to save member. Please try again.'
+      );
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function handleDelete() {
@@ -126,6 +144,7 @@ export default function AdminScreen({ navigation }: Props) {
   function openAdd() {
     setAddHuid('');
     setAddName('');
+    setAddEmail('');
     setAddCardUid('');
     setAddLabs([]);
     setAddNewLab('');
@@ -141,19 +160,40 @@ export default function AdminScreen({ navigation }: Props) {
       Alert.alert('Validation', 'Name is required.');
       return;
     }
+    if (!addEmail.trim()) {
+      Alert.alert('Validation', 'Email is required.');
+      return;
+    }
     const existing = members.find((m) => m.huid === addHuid.trim());
     if (existing) {
       Alert.alert('Duplicate', 'A member with that HUID already exists.');
       return;
     }
-    await addMember({
-      huid: addHuid.trim(),
-      name: addName.trim(),
-      cardUid: addCardUid.trim(),
-      labs: addLabs,
-    });
-    await refresh();
-    setShowAdd(false);
+
+    let normalizedCardUid = '';
+    try {
+      normalizedCardUid = normalizeCardUid(addCardUid);
+    } catch (error: any) {
+      Alert.alert('Validation', error?.message ?? 'Invalid card UID.');
+      return;
+    }
+
+    setSavingAdd(true);
+    try {
+      await addMember({
+        huid: addHuid.trim(),
+        name: addName.trim(),
+        email: addEmail.trim(),
+        cardUid: normalizedCardUid,
+        labs: addLabs,
+      });
+      await refresh();
+      setShowAdd(false);
+    } catch (error: any) {
+      Alert.alert('Save Failed', error?.message ?? 'Unable to save member. Please try again.');
+    } finally {
+      setSavingAdd(false);
+    }
   }
 
   return (
@@ -169,8 +209,12 @@ export default function AdminScreen({ navigation }: Props) {
         {members.length === 0 && (
           <Text style={styles.emptyText}>No members yet. Tap + Add Member to get started.</Text>
         )}
-        {members.map((member) => (
-          <MemberCard key={member.huid} member={member} onEdit={() => openEdit(member)} />
+        {members.map((member, index) => (
+          <MemberCard
+            key={`${member.huid}-${index}`}
+            member={member}
+            onEdit={() => openEdit(member)}
+          />
         ))}
       </ScrollView>
 
@@ -202,6 +246,17 @@ export default function AdminScreen({ navigation }: Props) {
               placeholderTextColor="#aaa"
             />
 
+            <Text style={styles.fieldLabel}>Email</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={editEmail}
+              onChangeText={setEditEmail}
+              placeholder="email@example.com"
+              placeholderTextColor="#aaa"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
             <Text style={styles.fieldLabel}>NFC Card UID</Text>
             <View style={styles.uidRow}>
               <TextInput
@@ -225,9 +280,9 @@ export default function AdminScreen({ navigation }: Props) {
 
             <Text style={styles.fieldLabel}>Labs</Text>
             <View style={styles.chipRow}>
-              {editLabs.map((lab) => (
+              {editLabs.map((lab, index) => (
                 <TouchableOpacity
-                  key={lab}
+                  key={`${lab}-${index}`}
                   style={styles.removableChip}
                   onPress={() => setEditLabs(editLabs.filter((l) => l !== lab))}
                 >
@@ -273,8 +328,8 @@ export default function AdminScreen({ navigation }: Props) {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit}>
-              <Text style={styles.saveBtnText}>Save</Text>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit} disabled={savingEdit}>
+              <Text style={styles.saveBtnText}>{savingEdit ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={closeEdit}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -318,6 +373,17 @@ export default function AdminScreen({ navigation }: Props) {
               placeholderTextColor="#aaa"
             />
 
+            <Text style={styles.fieldLabel}>Email</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={addEmail}
+              onChangeText={setAddEmail}
+              placeholder="email@example.com"
+              placeholderTextColor="#aaa"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
             <Text style={styles.fieldLabel}>NFC Card UID (optional)</Text>
             <View style={styles.uidRow}>
               <TextInput
@@ -342,9 +408,9 @@ export default function AdminScreen({ navigation }: Props) {
 
             <Text style={styles.fieldLabel}>Labs</Text>
             <View style={styles.chipRow}>
-              {addLabs.map((lab) => (
+              {addLabs.map((lab, index) => (
                 <TouchableOpacity
-                  key={lab}
+                  key={`${lab}-${index}`}
                   style={styles.removableChip}
                   onPress={() => setAddLabs(addLabs.filter((l) => l !== lab))}
                 >
@@ -390,8 +456,8 @@ export default function AdminScreen({ navigation }: Props) {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAdd}>
-              <Text style={styles.saveBtnText}>Save Member</Text>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAdd} disabled={savingAdd}>
+              <Text style={styles.saveBtnText}>{savingAdd ? 'Saving…' : 'Save Member'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAdd(false)}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -423,8 +489,8 @@ function MemberCard({ member, onEdit }: MemberCardProps) {
       </Text>
       <View style={styles.chipRow}>
         {member.labs && member.labs.length > 0 ? (
-          member.labs.map((lab) => (
-            <View key={lab} style={styles.labChip}>
+          member.labs.map((lab, index) => (
+            <View key={`${lab}-${index}`} style={styles.labChip}>
               <Text style={styles.labChipText}>{lab}</Text>
             </View>
           ))

@@ -152,7 +152,7 @@ export default function CheckoutScreen({ navigation, route }: Props) {
               <Text style={styles.labHeader}>{labName}</Text>
               <View style={styles.card}>
                 {labItems.map((item, index) => (
-                  <View key={item.id}>
+                  <View key={`${item.id}-${index}`}>
                     {index > 0 && <View style={styles.separator} />}
                     {renderItem({ item })}
                   </View>

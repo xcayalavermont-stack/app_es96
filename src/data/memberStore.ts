@@ -9,6 +9,24 @@ interface MemberDataSource {
   remove(huid: string): Promise<void>;
 }
 
+export function normalizeCardUid(cardUid: string): string {
+  const trimmed = cardUid.trim().toUpperCase();
+  if (!trimmed) return '';
+
+  const cleaned = trimmed.replace(/[:-\s]/g, '');
+  if (!/^[0-9A-F]*$/.test(cleaned)) {
+    throw new Error(
+      'Card UID must contain only hexadecimal characters and optional separators like ":" or "-".'
+    );
+  }
+  if (cleaned.length === 0) return '';
+  if (cleaned.length % 2 !== 0) {
+    throw new Error('Card UID must contain an even number of hexadecimal digits.');
+  }
+
+  return cleaned.match(/.{1,2}/g)!.join(':');
+}
+
 const SUPABASE_URL = 'https://kjdybhbvwglpdyqwohbl.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_T3p8DrhHKdFp4CzL3eTzAw_IkSkpKCd';
 
@@ -36,6 +54,7 @@ function mapSupabaseUserToMember(user: any): MemberRecord {
     cardUid: user.card_uid ?? '',
     huid: user.huid ?? '',
     name: user.name ?? '',
+    email: user.email ?? '',
     labs: Array.isArray(user.labs) ? user.labs : [],
   };
 }
@@ -45,7 +64,12 @@ class AsyncStorageDataSource implements MemberDataSource {
 
   async loadAll(): Promise<MemberRecord[]> {
     const raw = await AsyncStorage.getItem(this.key);
-    return raw ? (JSON.parse(raw) as MemberRecord[]) : [];
+    const members = raw ? (JSON.parse(raw) as MemberRecord[]) : [];
+    // Backward compatibility: add email if missing
+    return members.map(member => ({
+      ...member,
+      email: member.email || '',
+    }));
   }
 
   async saveAll(members: MemberRecord[]): Promise<void> {
@@ -72,16 +96,23 @@ class AsyncStorageDataSource implements MemberDataSource {
   }
 }
 
+const localMemberDataSource = new AsyncStorageDataSource();
+
 class SupabaseMemberDataSource implements MemberDataSource {
   async loadAll(): Promise<MemberRecord[]> {
-    const rows = await supabaseRequest(
-      'users?select=card_uid,huid,name,labs&order=name.asc',
-      { method: 'GET' }
-    );
+    try {
+      const rows = await supabaseRequest(
+        'users?select=card_uid,huid,name,labs&order=name.asc',
+        { method: 'GET' }
+      );
 
-    return Array.isArray(rows)
-      ? rows.map(mapSupabaseUserToMember)
-      : [];
+      return Array.isArray(rows)
+        ? rows.map(mapSupabaseUserToMember)
+        : [];
+    } catch (error) {
+      console.warn('Supabase member load failed, falling back to local storage.', error);
+      return localMemberDataSource.loadAll();
+    }
   }
 
   async saveAll(members: MemberRecord[]): Promise<void> {
@@ -90,49 +121,71 @@ class SupabaseMemberDataSource implements MemberDataSource {
     }
 
     const payload = members.map((member) => ({
-      card_uid: member.cardUid,
+      card_uid: normalizeCardUid(member.cardUid),
       huid: member.huid,
       name: member.name,
+      email: member.email,
       labs: member.labs,
     }));
 
-    await supabaseRequest('users?on_conflict=huid', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      await supabaseRequest('users?on_conflict=huid', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.warn('Supabase member save failed, falling back to local storage.', error);
+      await localMemberDataSource.saveAll(members);
+    }
   }
 
   async add(member: MemberRecord): Promise<void> {
-    await this.saveAll([member]);
+    try {
+      await this.saveAll([member]);
+    } catch (error) {
+      console.warn('Supabase member add failed, falling back to local storage.', error);
+      await localMemberDataSource.add(member);
+    }
   }
 
   async update(huid: string, updates: Partial<MemberRecord>): Promise<void> {
     const body: any = {};
     if (updates.name !== undefined) body.name = updates.name;
-    if (updates.cardUid !== undefined) body.card_uid = updates.cardUid;
+    if (updates.email !== undefined) body.email = updates.email;
+    if (updates.cardUid !== undefined) body.card_uid = normalizeCardUid(updates.cardUid);
     if (updates.labs !== undefined) body.labs = updates.labs;
 
     if (Object.keys(body).length === 0) {
       return;
     }
 
-    await supabaseRequest(`users?huid=eq.${encodeURIComponent(huid)}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    try {
+      await supabaseRequest(`users?huid=eq.${encodeURIComponent(huid)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      console.warn('Supabase member update failed, falling back to local storage.', error);
+      await localMemberDataSource.update(huid, updates);
+    }
   }
 
   async remove(huid: string): Promise<void> {
-    await supabaseRequest(`users?huid=eq.${encodeURIComponent(huid)}`, {
-      method: 'DELETE',
-    });
+    try {
+      await supabaseRequest(`users?huid=eq.${encodeURIComponent(huid)}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.warn('Supabase member delete failed, falling back to local storage.', error);
+      await localMemberDataSource.remove(huid);
+    }
   }
 }
 
