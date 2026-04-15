@@ -1,19 +1,44 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MemberRecord } from './huidDatabase';
 
-// ─── Data Source Interface ────────────────────────────────────────────────────
-// All screens use the exported functions below.
-// To switch to a remote SQL database, implement this interface and swap it in
-// at the "Active data source" line — no screen code needs to change.
-
 interface MemberDataSource {
   loadAll(): Promise<MemberRecord[]>;
   saveAll(members: MemberRecord[]): Promise<void>;
+  add(member: MemberRecord): Promise<void>;
+  update(huid: string, updates: Partial<MemberRecord>): Promise<void>;
+  remove(huid: string): Promise<void>;
 }
-//Right now uses AsyncStorageDataSource (local to each phone)
-//When your SQL backend is ready, uncomment RemoteApiDataSource, fill in your API URL, and change one line — all phones will share the same members instantly
-//AdminScreen and LoginScreen don't need any changes either way
-// ─── AsyncStorage Implementation (current — local to each device) ─────────────
+
+const SUPABASE_URL = 'https://kjdybhbvwglpdyqwohbl.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_T3p8DrhHKdFp4CzL3eTzAw_IkSkpKCd';
+
+async function supabaseRequest(path: string, init: RequestInit) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Accept: 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Supabase request failed: ${response.status} ${response.statusText} – ${errorBody}`);
+  }
+
+  return response.json();
+}
+
+function mapSupabaseUserToMember(user: any): MemberRecord {
+  return {
+    cardUid: user.card_uid ?? '',
+    huid: user.huid ?? '',
+    name: user.name ?? '',
+    labs: Array.isArray(user.labs) ? user.labs : [],
+  };
+}
 
 class AsyncStorageDataSource implements MemberDataSource {
   private readonly key = '@huid_members';
@@ -26,36 +51,92 @@ class AsyncStorageDataSource implements MemberDataSource {
   async saveAll(members: MemberRecord[]): Promise<void> {
     await AsyncStorage.setItem(this.key, JSON.stringify(members));
   }
+
+  async add(member: MemberRecord): Promise<void> {
+    const members = await this.loadAll();
+    await this.saveAll([...members, member]);
+  }
+
+  async update(huid: string, updates: Partial<MemberRecord>): Promise<void> {
+    const members = await this.loadAll();
+    const updated = members.map((member) =>
+      member.huid === huid ? { ...member, ...updates } : member
+    );
+    await this.saveAll(updated);
+  }
+
+  async remove(huid: string): Promise<void> {
+    const members = await this.loadAll();
+    const updated = members.filter((member) => member.huid !== huid);
+    await this.saveAll(updated);
+  }
 }
 
-// ─── Remote SQL API Implementation (future — shared across all devices) ───────
-// When your SQL backend is ready:
-//   1. Uncomment and fill in RemoteApiDataSource below with your API URL
-//   2. Change the active data source line to: new RemoteApiDataSource()
-//   3. Every phone will instantly share the same member list
-//
-// class RemoteApiDataSource implements MemberDataSource {
-//   private readonly baseUrl = 'https://your-api.com';
-//
-//   async loadAll(): Promise<MemberRecord[]> {
-//     const res = await fetch(`${this.baseUrl}/members`);
-//     return res.json();
-//   }
-//
-//   async saveAll(members: MemberRecord[]): Promise<void> {
-//     await fetch(`${this.baseUrl}/members`, {
-//       method: 'PUT',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify(members),
-//     });
-//   }
-// }
+class SupabaseMemberDataSource implements MemberDataSource {
+  async loadAll(): Promise<MemberRecord[]> {
+    const rows = await supabaseRequest(
+      'users?select=card_uid,huid,name,labs&order=name.asc',
+      { method: 'GET' }
+    );
 
-// ─── Active data source — swap this line to switch backends ──────────────────
+    return Array.isArray(rows)
+      ? rows.map(mapSupabaseUserToMember)
+      : [];
+  }
 
-const dataSource: MemberDataSource = new AsyncStorageDataSource();
+  async saveAll(members: MemberRecord[]): Promise<void> {
+    if (members.length === 0) {
+      return;
+    }
 
-// ─── Public API (used by screens — signatures stay the same after SQL swap) ──
+    const payload = members.map((member) => ({
+      card_uid: member.cardUid,
+      huid: member.huid,
+      name: member.name,
+      labs: member.labs,
+    }));
+
+    await supabaseRequest('users?on_conflict=huid', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async add(member: MemberRecord): Promise<void> {
+    await this.saveAll([member]);
+  }
+
+  async update(huid: string, updates: Partial<MemberRecord>): Promise<void> {
+    const body: any = {};
+    if (updates.name !== undefined) body.name = updates.name;
+    if (updates.cardUid !== undefined) body.card_uid = updates.cardUid;
+    if (updates.labs !== undefined) body.labs = updates.labs;
+
+    if (Object.keys(body).length === 0) {
+      return;
+    }
+
+    await supabaseRequest(`users?huid=eq.${encodeURIComponent(huid)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async remove(huid: string): Promise<void> {
+    await supabaseRequest(`users?huid=eq.${encodeURIComponent(huid)}`, {
+      method: 'DELETE',
+    });
+  }
+}
+
+const dataSource: MemberDataSource = new SupabaseMemberDataSource();
 
 export async function loadMembers(): Promise<MemberRecord[]> {
   return dataSource.loadAll();
@@ -66,27 +147,19 @@ export async function saveMembers(members: MemberRecord[]): Promise<void> {
 }
 
 export async function addMember(m: MemberRecord): Promise<MemberRecord[]> {
-  const members = await loadMembers();
-  const updated = [...members, m];
-  await saveMembers(updated);
-  return updated;
+  await dataSource.add(m);
+  return loadMembers();
 }
 
 export async function updateMember(
   huid: string,
   updates: Partial<MemberRecord>
 ): Promise<MemberRecord[]> {
-  const members = await loadMembers();
-  const updated = members.map((m) =>
-    m.huid === huid ? { ...m, ...updates } : m
-  );
-  await saveMembers(updated);
-  return updated;
+  await dataSource.update(huid, updates);
+  return loadMembers();
 }
 
 export async function deleteMember(huid: string): Promise<MemberRecord[]> {
-  const members = await loadMembers();
-  const updated = members.filter((m) => m.huid !== huid);
-  await saveMembers(updated);
-  return updated;
+  await dataSource.remove(huid);
+  return loadMembers();
 }

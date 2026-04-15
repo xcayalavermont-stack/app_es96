@@ -106,7 +106,7 @@ export default function CartScreen({ navigation, route }: Props) {
       setCartItems((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
+          id: product.id,
           barcode: product.barcode,
           name: product.name,
           quantity: 1,

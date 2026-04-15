@@ -12,6 +12,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import * as Battery from 'expo-battery';
 import { CartItem, RootStackParamList } from '../types';
+import { syncTransaction } from '../data/transactionStore';
 
 type CheckoutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Checkout'>;
 type CheckoutScreenRouteProp = RouteProp<RootStackParamList, 'Checkout'>;
@@ -107,10 +108,13 @@ export default function CheckoutScreen({ navigation, route }: Props) {
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await syncTransaction(memberName, items, total, labAssignments);
       setSubmitted(true);
     } catch (error: any) {
-      Alert.alert('Checkout Failed', error.message ?? 'An error occurred. Please try again.');
+      Alert.alert(
+        'Checkout Failed',
+        error?.message || 'An error occurred while syncing to Supabase. Please try again.'
+      );
     } finally {
       setSubmitting(false);
     }
