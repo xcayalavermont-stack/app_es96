@@ -31,4 +31,5 @@ export type RootStackParamList = {
     labAssignments: LabAssignments;
     memberName: string;
   };
+  NfcChipProgrammer: undefined;
 };

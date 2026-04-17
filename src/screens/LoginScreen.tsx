@@ -61,6 +61,8 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       if (id.trim() === '1111') {
         navigation.replace('Admin');
+      } else if (id.trim() === '2222') {
+        navigation.replace('NfcChipProgrammer');
       } else {
         const members = await loadMembers();
         const member = members.find((m) => m.huid === id.trim());

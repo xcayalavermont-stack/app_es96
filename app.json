@@ -10,15 +10,26 @@
         "NFCReaderUsageDescription": "Used to read Harvard HUID cards for member enrollment."
       },
       "entitlements": {
-        "com.apple.developer.nfc.readersession.formats": ["TAG"]
+        "com.apple.developer.nfc.readersession.formats": [
+          "TAG",
+          "TAG"
+        ]
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
       "package": "com.inventoryapp",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.NFC"
-      ]
+        "android.permission.NFC",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.NFC",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "plugins": [
       [
@@ -28,6 +39,14 @@
         }
       ],
       "./plugins/withNfc"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0f0e20cd-0260-462a-9bc3-1215387b7498"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0f0e20cd-0260-462a-9bc3-1215387b7498"
+    }
   }
 }

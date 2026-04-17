@@ -10,6 +10,7 @@ import LabAssignmentQuestionScreen from '../screens/LabAssignmentQuestionScreen'
 import LabSelectOneScreen from '../screens/LabSelectOneScreen';
 import LabSelectManyScreen from '../screens/LabSelectManyScreen';
 import LabItemAssignScreen from '../screens/LabItemAssignScreen';
+import NfcChipProgrammerScreen from '../screens/NfcChipProgrammerScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -66,6 +67,11 @@ export default function AppNavigator() {
       <Stack.Screen
         name="LabItemAssign"
         component={LabItemAssignScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="NfcChipProgrammer"
+        component={NfcChipProgrammerScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

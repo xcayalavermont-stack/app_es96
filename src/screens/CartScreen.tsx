@@ -25,6 +25,7 @@ import {
   findProductByQuery,
   filterProducts,
 } from '../data/productStore';
+import { useNfcNdefRead } from '../hooks/useNfcNdefRead';
 
 type CartScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Cart'>;
 
@@ -67,6 +68,17 @@ export default function CartScreen({ navigation, route }: Props) {
   React.useEffect(() => {
     loadAvailableProducts();
   }, []);
+
+  // NFC chip shortcut: tapping a programmed chip adds its item to cart
+  const handleNfcChipTap = React.useCallback((barcode: string) => {
+    const product = findProductByQuery(barcode, availableProducts);
+    if (product) {
+      addProductToCart(product);
+    }
+    // If products haven't loaded yet, silently ignore — the user can tap again
+  }, [availableProducts]);
+
+  useNfcNdefRead(handleNfcChipTap, true);
 
   // Called when a barcode is submitted (from scanner or manual entry)
   const handleBarcodeSubmit = async () => {
@@ -213,6 +225,9 @@ export default function CartScreen({ navigation, route }: Props) {
     >
       {/* Barcode / Scanner Input */}
       <View style={styles.scanRow}>
+        <View style={styles.nfcBadge}>
+          <Text style={styles.nfcBadgeText}>NFC</Text>
+        </View>
         <TextInput
           ref={inputRef}
           style={styles.scanInput}
@@ -513,5 +528,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 4,
+  },
+  nfcBadge: {
+    backgroundColor: '#e8f5e9',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4caf50',
+  },
+  nfcBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#2e7d32',
+    letterSpacing: 0.5,
   },
 });
